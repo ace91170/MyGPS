@@ -1,159 +1,244 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="utf-8">
-    <title>Peta Monitoring GPS - Auto Alarm</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <style>
-        html, body { margin:0; padding:0; font-family: sans-serif; overflow: hidden; }
-        #map { width:100%; height:100vh; }
-        
-        /* Overlay Awal untuk Izin Audio */
-        #start-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: white; text-align: center; cursor: pointer;
-        }
-        .start-btn {
-            background: #28a745; color: white; border: none; padding: 20px 40px;
-            font-size: 20px; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
+<meta charset="utf-8">
+<title>Peta Titik Indonesia – Live Tracking</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-        .panel { position:absolute; top:10px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:8px; }
-        .panel button { 
-            background:#ffffff; border:none; border-radius:8px; padding:12px 15px; 
-            font-size:12px; cursor:pointer; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.1);
-        }
-        .legend { 
-            position:absolute; bottom:25px; left:10px; background:rgba(255,255,255,0.9); 
-            padding:12px; font-size:11px; z-index:1000; border-radius:8px; border:1px solid #ccc;
-        }
-        .pulse-blue { 
-            width:16px; height:16px; background:#007bff; border:3px solid white; 
-            border-radius:50%; position:relative; box-shadow: 0 0 8px rgba(0,0,0,0.3); 
-        }
-        .pulse-blue::after { 
-            content:""; position:absolute; left:-3px; top:-3px; width:16px; height:16px; 
-            border-radius:50%; background:rgba(0,123,255,0.4); animation:pulse 1.8s ease-out infinite; 
-        }
-        @keyframes pulse { 0%{transform:scale(1);opacity:1;} 100%{transform:scale(3.5);opacity:0;} }
-    </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+/* Penyesuaian: Memastikan container memenuhi layar dengan benar */
+html, body { margin:0; padding:0; height: 100%; width: 100%; overflow: hidden; }
+#map { width:100%; height:100vh; background: #f0f0f0; }
+
+/* Panel tombol */
+.panel{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:1000;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.panel button{
+  background:#ffffff;
+  border:1px solid #ccc;
+  border-radius:6px;
+  padding:10px 12px;
+  font-size:13px;
+  font-weight: bold;
+  cursor:pointer;
+  box-shadow:0 2px 4px rgba(0,0,0,.2);
+  /* Penyesuaian: Mencegah delay klik di layar sentuh */
+  touch-action: manipulation;
+}
+
+/* Legenda */
+.legend{
+  position:absolute;
+  bottom:25px;
+  left:10px;
+  background:rgba(255,255,255,0.9);
+  padding:8px 12px;
+  font-size:13px;
+  z-index:1000;
+  border-radius:6px;
+  box-shadow:0 0 5px rgba(0,0,0,.3);
+  pointer-events: none;
+}
+
+/* Live position biru berdenyut */
+.pulse-blue{
+  width:16px;
+  height:16px;
+  background:rgba(0,123,255,1);
+  border: 2px solid white; 
+  border-radius:50%;
+  position:relative;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+}
+.pulse-blue::after{
+  content:"";
+  position:absolute;
+  left:-2px;
+  top:-2px;
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  background:transparent;
+  border: 2px solid rgba(0,123,255,0.8);
+  animation:pulse 1.5s ease-out infinite;
+}
+@keyframes pulse{
+  0%{transform:scale(1);opacity:1;}
+  100%{transform:scale(3);opacity:0;}
+}
+</style>
 </head>
-<body>
 
-<div id="start-overlay" onclick="startSystem()">
-    <button class="start-btn">KLIK UNTUK AKTIFKAN PETA & ALARM</button>
-    <p style="margin-top:20px;">Izin akses lokasi dan audio diperlukan.</p>
-</div>
+<body>
 
 <div id="map"></div>
 
 <div class="panel">
-    <button onclick="goToMe()">🧭 POSISI SAYA</button>
-    <button id="followBtn" onclick="toggleFollow()" style="background:#d4edda">📍 IKUTI SAYA: ON</button>
+  <button onclick="goToMe()">🧭 Ke posisi saya</button>
+  <button id="btnFollow" onclick="toggleFollow()">📍 Ikuti: OFF</button>
+  <button onclick="resetZoom()">🔄 Reset zoom</button>
 </div>
 
 <div class="legend">
-    <strong>Sistem Monitoring GPS</strong><br>
-    🔴 Titik Target (Alarm AKTIF)<br>
-    🔵 Posisi Anda<br>
-    <hr>
-    Status: <span id="status" style="color:green; font-weight:bold;">Sistem Standby</span>
+🔴 Titik koordinat (Data Anda)<br>
+🔵 Posisi Anda (LIVE)
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-var map = L.map('map', { zoomControl: false }).setView([-1.04, 113.92], 10);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// ============================
+// INIT MAP
+// ============================
+// Penyesuaian: Mematikan kontrol zoom default untuk dipindah ke kanan bawah agar tidak tertutup panel
+var map = L.map('map', { zoomControl: false });
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-var isFollowing = true; // Default ON
-var userMarker = null, lastPos = null;
-var targets = [];
-var seen = new Set();
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'&copy; OpenStreetMap'
+}).addTo(map);
 
-// 1. Data Koordinat (Unik)
-var rawLocations = [
-    [-0.9398683, 113.9983633], [-0.9396475, 113.997305], [-0.9396131, 113.9963251], 
-    [-0.9400508, 113.9958913], [-0.9426341, 113.9922969], [-0.9443269, 113.989899], 
-    [-0.945568, 113.9900075], [-0.9478702, 113.9875902], [-0.9481333, 113.984495], 
-    [-0.9490799, 113.9829559], [-1.0885204, 113.872688], [-1.0919588, 113.868948],
-    [-2.158995, 113.942723] // Titik Palangkaraya
-    // ... [Koordinat lainnya otomatis terfilter jika dobel]
+// ============================
+// KOORDINAT ANDA (Substansi Tetap)
+// ============================
+var coords = [
+  [-0.9398683,113.9983633], [-0.9396475,113.997305], [-0.9396131,113.9963251],
+  [-0.9400508,113.9958913], [-0.9426341,113.9922969], [-0.9443269,113.989899],
+  [-0.945568,113.9900075], [-0.9478702,113.9875902], [-0.9481333,113.984495],
+  [-0.9490799,113.9829559], [-0.9496681,113.9817438], [-0.950279,113.9815748],
+  [-0.9507502,113.9796011], [-0.9509111,113.9789807], [-0.9515162,113.9746019],
+  [-0.9507802,113.9736127], [-0.9501424,113.9728017], [-0.9509645,113.9716935],
+  [-0.9516382,113.9693287], [-0.9562016,113.9678527], [-0.9589516,113.967487],
+  [-0.9622463,113.9653863], [-0.9645443,113.96476], [-0.9658818,113.962869],
+  [-0.9712135,113.9583235], [-0.9732324,113.9576436], [-0.9764483,113.95879],
+  [-0.9796551,113.9589544], [-0.9802581,113.95996], [-0.9807984,113.9610812],
+  [-0.9853007,113.9630436], [-0.9908578,113.963157], [-0.99576,113.961514],
+  [-0.99640991,113.96037519], [-0.998942,113.9586848], [-1.0019681,113.9573841],
+  [-1.0049293,113.9578595], [-1.0062289,113.9576941], [-1.0068049,113.9576488],
+  [-1.0119795,113.9556548], [-1.0210327,113.9521815], [-1.0221569,113.9501734],
+  [-1.0230672,113.9504812], [-1.0242539,113.9497533], [-1.0255202,113.949793],
+  [-1.0276017,113.9473637], [-1.0286273,113.9460514], [-1.029966,113.9458089],
+  [-1.0307193,113.9450336], [-1.0317172,113.9445392], [-1.0340786,113.9440997],
+  [-1.0352266,113.9439115], [-1.0363828,113.9439575], [-1.0374275,113.9434912],
+  [-1.0397686,113.9433359], [-1.0412295,113.9423898], [-1.0420347,113.9422273],
+  [-1.0427202,113.9413728], [-1.0434827,113.9405541], [-1.0448959,113.939752],
+  [-1.0467699,113.9400067], [-1.0475123,113.9395898], [-1.049294,113.9384091],
+  [-1.0536566,113.9371957], [-1.05477,113.936485], [-1.0562356,113.9364062],
+  [-1.0582165,113.9359371], [-1.0591312,113.9352778], [-1.060256,113.9346623],
+  [-1.0607245,113.9319475], [-1.060455,113.9290695], [-1.0617759,113.9267933],
+  [-1.0623948,113.9262709], [-1.0651755,113.9243126], [-1.065617,113.9231727],
+  [-1.0664368,113.9208059], [-1.0679874,113.9186049], [-1.0698009,113.9168659],
+  [-1.0705797,113.9158323], [-1.071894,113.9144727], [-1.0732005,113.9132818],
+  [-1.0747691,113.9098664], [-1.075034,113.9072548], [-1.0758168,113.9053506],
+  [-1.0760139,113.9041949], [-1.0764097,113.9023165], [-1.0772565,113.9001918],
+  [-1.0777814,113.8985109], [-1.0779541,113.8967136], [-1.0784635,113.8955646],
+  [-1.078725,113.8941187], [-1.0795339,113.8921079], [-1.0805781,113.890319],
+  [-1.0814819,113.8878399], [-1.0816308,113.8869932], [-1.0820327,113.8851276],
+  [-1.0823924,113.8837585], [-1.0829072,113.8833311], [-1.0838205,113.8816435],
+  [-1.083747,113.8801259], [-1.0842773,113.8790922], [-1.086053,113.8771372],
+  [-1.0873728,113.8753825], [-1.0885204,113.872688], [-1.0890845,113.8716607],
+  [-1.0895748,113.8705911], [-1.0913175,113.8691019], [-1.0919588,113.868948]
 ];
 
-// 2. Fungsi Jalankan Sistem (Setelah Klik)
-function startSystem() {
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    document.getElementById('start-overlay').style.display = 'none';
-    initGeolocation();
-}
-
-function playBeep() {
-    var osc = audioCtx.createOscillator();
-    var gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-}
-
-// 3. Render Marker Unik
-rawLocations.forEach(coord => {
-    let key = coord[0].toFixed(6) + "," + coord[1].toFixed(6);
-    if (!seen.has(key)) {
-        seen.add(key);
-        var marker = L.circleMarker(coord, {
-            radius: 6, fillColor: 'red', color: 'darkred', weight: 1, fillOpacity: 0.8
-        }).addTo(map);
-        targets.push({ latlng: L.latLng(coord), marker: marker, alerted: false });
-    }
+// ============================
+// RENDER DATA MARKERS
+// ============================
+var bounds=[];
+coords.forEach(function(c){
+  bounds.push(c);
+  L.circleMarker(c,{
+    radius:4, /* Sedikit lebih besar agar mudah dilihat di layar HP */
+    fillColor:'red',
+    color:'white', /* Border putih agar titik merah tidak tersamar dengan jalan */
+    weight:1,
+    fillOpacity:0.6
+  }).addTo(map);
 });
 
-// 4. Geolocation Logic
-function initGeolocation() {
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(pos => {
-            var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-            lastPos = latlng;
+var initialBounds = bounds.length ? L.latLngBounds(bounds) : null;
+if(initialBounds){ map.fitBounds(initialBounds); }
 
-            if (!userMarker) {
-                userMarker = L.marker(latlng, { 
-                    icon: L.divIcon({ className:'', html:'<div class="pulse-blue"></div>', iconAnchor:[8,8] }) 
-                }).addTo(map);
-            } else {
-                userMarker.setLatLng(latlng);
-            }
+// ============================
+// LIVE POSITION (BIRU - Optimasi Android)
+// ============================
+var lastUserLatLng = null;
+var liveMarker = null;
+var followMode = false;
 
-            if (isFollowing) map.setView(latlng, 15);
+var blueIcon = L.divIcon({
+  className:'',
+  html:'<div class="pulse-blue"></div>',
+  iconSize:[16,16],
+  iconAnchor:[8,8]
+});
 
-            // Cek Jarak Alarm (Otomatis ON)
-            targets.forEach(t => {
-                let dist = latlng.distanceTo(t.latlng);
-                if (dist < 700 && !t.alerted) {
-                    t.alerted = true;
-                    t.marker.openPopup();
-                    playBeep(); // Alarm bunyi otomatis
-                } else if (dist > 1000) {
-                    t.alerted = false;
-                }
-            });
-            document.getElementById('status').innerText = "Sistem Aktif";
-        }, err => alert("Aktifkan GPS Anda"), { enableHighAccuracy: true });
+// Penyesuaian: Memisahkan fungsi update lokasi agar lebih stabil di Chrome
+function onLocationUpdate(pos) {
+    lastUserLatLng = [pos.coords.latitude, pos.coords.longitude];
+    if(!liveMarker) {
+        liveMarker = L.marker(lastUserLatLng,{icon:blueIcon}).addTo(map).bindPopup("📍 Posisi Anda");
+    } else {
+        liveMarker.setLatLng(lastUserLatLng);
+    }
+    
+    if(followMode){
+        map.panTo(lastUserLatLng);
     }
 }
 
-function goToMe() { if (lastPos) map.setView(lastPos, 15); }
-
-function toggleFollow() {
-    isFollowing = !isFollowing;
-    document.getElementById('followBtn').innerText = isFollowing ? "📍 IKUTI SAYA: ON" : "📍 IKUTI SAYA: OFF";
-    document.getElementById('followBtn').style.background = isFollowing ? "#d4edda" : "#fff";
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(onLocationUpdate, 
+    function(err){
+      console.warn("GPS Error: " + err.message);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000, 
+      maximumAge: 0
+    }
+  );
 }
+
+// ============================
+// BUTTON FUNCTIONS
+// ============================
+function goToMe(){
+  if(lastUserLatLng){
+    map.setView(lastUserLatLng, 17); // Zoom lebih dekat saat fokus ke saya
+  } else {
+    alert("Sedang mencari sinyal GPS...");
+  }
+}
+
+function toggleFollow(){
+  followMode = !followMode;
+  var btn = document.getElementById('btnFollow');
+  btn.innerText = followMode ? "📍 Ikuti: ON" : "📍 Ikuti: OFF";
+  // Memberikan feedback warna agar user tahu mode aktif
+  btn.style.background = followMode ? "#e3f2fd" : "#ffffff";
+}
+
+function resetZoom(){
+  if(initialBounds){
+    map.fitBounds(initialBounds);
+  }
+}
+
+// Penyesuaian Penting: Menjamin peta dirender ulang agar tidak abu-abu di Android
+window.addEventListener('load', function() {
+    setTimeout(function() { 
+        map.invalidateSize(); 
+    }, 500);
+});
 </script>
+
 </body>
 </html>
